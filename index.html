@@ -1,0 +1,241 @@
+
+
+<!DOCTYPE html>  <html lang="en" dir="ltr">  
+<head>  
+    <meta charset="UTF-8">  
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">  
+    <title>Storyboard Scene Generator</title>  
+    <script src="https://cdn.tailwindcss.com"></script>  
+    <link rel="preconnect" href="https://fonts.googleapis.com">  
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>  
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">  
+    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=swap" rel="stylesheet">  
+    <style>  
+        body {  
+            font-family: 'Inter', sans-serif;  
+            background-color: #f1f5f9;  
+        }  
+        .persian-caption {  
+             font-family: 'Vazirmatn', sans-serif;  
+        }  
+        #generate-btn.disabled {  
+            background-color: #9ca3af;  
+            cursor: not-allowed;  
+            opacity: 0.7;  
+        }  
+    </style>  
+</head>  
+<body class="bg-slate-100 flex flex-col items-center min-h-screen p-4">  <div class="w-full max-w-5xl bg-white rounded-2xl shadow-lg p-6 md:p-8 space-y-6">  
+    <div class="text-center">  
+        <h1 class="text-3xl md:text-4xl font-bold text-slate-800">Storyboard Scene Generator</h1>  
+        <p class="text-slate-500 mt-2">Turn your ideas into downloadable image and text sequences.</p>  
+    </div>  
+
+    <!-- Input Section -->  
+    <div class="space-y-4">  
+        <label for="script-input" class="block font-medium text-slate-700">Your script or idea (in Persian):</label>  
+        <textarea id="script-input" rows="5" class="w-full p-4 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition persian-caption" placeholder="مثال: پسری در حال کتاب خواندن زیر یک درخت است. ناگهان یک سیب روی سرش می‌افتد و ایده‌ای به ذهنش می‌رسد..."></textarea>  
+        <button id="generate-btn" class="w-full bg-blue-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300 transition-all duration-300 flex items-center justify-center gap-2">  
+            <svg xmlns="http://www.w.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-grid"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>  
+            <span>Generate Scenes</span>  
+        </button>  
+    </div>  
+
+    <!-- Loading Spinner -->  
+    <div id="loading-spinner" class="text-center p-8 hidden">  
+        <div class="flex items-center justify-center gap-3">  
+             <svg class="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">  
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>  
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>  
+            </svg>  
+            <p id="loading-text" class="text-slate-600 font-medium text-lg">Getting things ready...</p>  
+        </div>  
+    </div>  
+      
+    <!-- Results Container -->  
+    <div id="results-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pt-4">  
+        <!-- Scene cards will be injected here -->  
+    </div>  
+      
+    <!-- Error Message -->  
+    <div id="error-message" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative" role="alert">  
+        <strong class="font-bold">Error!</strong>  
+        <span class="block sm:inline" id="error-text"></span>  
+    </div>  
+</div>  
+
+<script type="module">  
+    const generateBtn = document.getElementById('generate-btn');  
+    const scriptInput = document.getElementById('script-input');  
+    const loadingSpinner = document.getElementById('loading-spinner');  
+    const loadingText = document.getElementById('loading-text');  
+    const resultsContainer = document.getElementById('results-container');  
+    const errorMessage = document.getElementById('error-message');  
+    const errorText = document.getElementById('error-text');  
+      
+    const apiKey = "";  
+    const textModel = 'gemini-2.5-flash-preview-05-20';  
+    const imageModel = 'gemini-2.5-flash-image-preview';  
+
+    async function callApi(model, payload) {  
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;  
+        let retries = 3, delay = 1000;  
+        while (retries > 0) {  
+            try {  
+                const response = await fetch(url, {  
+                    method: 'POST',  
+                    headers: { 'Content-Type': 'application/json' },  
+                    body: JSON.stringify(payload),  
+                });  
+                if (!response.ok) throw new Error(`Network error: ${response.status}`);  
+                return await response.json();  
+            } catch (error) {  
+                console.error(`API call failed: ${error.message}. Retrying...`);  
+                retries--;  
+                if (retries === 0) throw error;  
+                await new Promise(resolve => setTimeout(resolve, delay));  
+                delay *= 2;  
+            }  
+        }  
+    }  
+
+    generateBtn.addEventListener('click', async () => {  
+        const script = scriptInput.value.trim();  
+        if (!script) {  
+            showError("Please enter your script.");  
+            return;  
+        }  
+
+        hideError();  
+        resultsContainer.innerHTML = '';  
+        loadingSpinner.style.display = 'block';  
+        generateBtn.classList.add('disabled');  
+        generateBtn.disabled = true;  
+
+        try {  
+            loadingText.textContent = "Breaking down the script into scenes...";  
+            const scenes = await getScenesFromScript(script);  
+            if (!scenes || scenes.length === 0) {  
+                throw new Error("Did not receive a valid response for scene breakdown.");  
+            }  
+
+            for (let i = 0; i < scenes.length; i++) {  
+                const scene = scenes[i];  
+                loadingText.textContent = `Generating image for scene ${i + 1} of ${scenes.length}...`;  
+                  
+                const imagePrompt = `A clean and simple whiteboard animation style sketch. The image should be primarily black and white line art, drawn as if with a marker on a plain white background, but with sparse, subtle pops of color to highlight key elements. The style should remain minimalist and clean. IMPORTANT: Do not include any Persian/Farsi text or characters in the image. Any text must be in English. Image of: ${scene.image_prompt}`;  
+                const imageData = await generateImage(imagePrompt);  
+                  
+                createSceneCard(scene.caption, imageData, i + 1);  
+            }  
+
+        } catch (err) {  
+            console.error("Error during generation:", err);  
+            showError(`An error occurred during generation: ${err.message}`);  
+        } finally {  
+            loadingSpinner.style.display = 'none';  
+            generateBtn.classList.remove('disabled');  
+            generateBtn.disabled = false;  
+        }  
+    });  
+      
+    function createSceneCard(caption, base64ImageData, sceneNumber) {  
+        const card = document.createElement('div');  
+        card.className = 'bg-white border border-slate-200 rounded-lg shadow-md flex flex-col overflow-hidden';  
+
+        const imageUrl = `data:image/png;base64,${base64ImageData}`;  
+          
+        card.innerHTML = `  
+            <div class="aspect-video bg-slate-100 flex items-center justify-center">  
+                <img src="${imageUrl}" alt="Scene ${sceneNumber}" class="w-full h-full object-contain">  
+            </div>  
+            <div class="p-4 flex-grow flex flex-col">  
+                <p class="persian-caption text-slate-700 text-right flex-grow">${caption}</p>  
+                <div class="mt-4 flex gap-2">  
+                    <button class="download-btn w-1/2 bg-green-500 text-white px-3 py-2 rounded-md hover:bg-green-600 transition-colors text-sm flex items-center justify-center gap-1">  
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>  
+                        Download  
+                    </button>  
+                    <button class="copy-btn w-1/2 bg-slate-500 text-white px-3 py-2 rounded-md hover:bg-slate-600 transition-colors text-sm flex items-center justify-center gap-1">  
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>  
+                        Copy Text  
+                    </button>  
+                </div>  
+            </div>  
+        `;  
+          
+        card.querySelector('.download-btn').addEventListener('click', () => {  
+            const a = document.createElement('a');  
+            a.href = imageUrl;  
+            a.download = `scene_${sceneNumber}.png`;  
+            document.body.appendChild(a);  
+            a.click();  
+            document.body.removeChild(a);  
+        });  
+
+        const copyBtn = card.querySelector('.copy-btn');  
+        const copyBtnOriginalText = copyBtn.innerHTML;  
+        copyBtn.addEventListener('click', () => {  
+            navigator.clipboard.writeText(caption).then(() => {  
+                copyBtn.textContent = 'Copied!';  
+                setTimeout(() => {  
+                    copyBtn.innerHTML = copyBtnOriginalText;  
+                }, 2000);  
+            });  
+        });  
+
+        resultsContainer.appendChild(card);  
+    }  
+
+    async function getScenesFromScript(script) {  
+        const payload = {  
+            contents: [{ parts: [{ text: script }] }],  
+            systemInstruction: { parts: [{ text: "Break user's script into visual scenes for a storyboard. For each scene, provide a short 'caption' in Persian, and a concise 'image_prompt' in English. The script provided by the user will be in Persian. Respond ONLY with a valid JSON array of objects. Do not include any other text or markdown formatting." }] },  
+            generationConfig: { responseMimeType: "application/json" }  
+        };  
+        const result = await callApi(textModel, payload);  
+        const rawJson = result.candidates?.[0]?.content?.parts?.[0]?.text;  
+        if (!rawJson) throw new Error("API did not return valid scene data.");  
+          
+        // --- IMPROVEMENT ---  
+        // This is a more robust way to extract the JSON array from the response.  
+        // Instead of removing markdown characters, it directly finds the content  
+        // between the first '[' and the last ']', making it less likely to fail  
+        // if the API response formatting changes slightly.  
+        try {  
+            const startIndex = rawJson.indexOf('[');  
+            const endIndex = rawJson.lastIndexOf(']');  
+            if (startIndex === -1 || endIndex === -1) {  
+                throw new Error("Could not find a valid JSON array in the response.");  
+            }  
+            const jsonString = rawJson.substring(startIndex, endIndex + 1);  
+            return JSON.parse(jsonString);  
+        } catch (e) {  
+            console.error("Failed to parse JSON. Raw response:", rawJson, "Error:", e);  
+            throw new Error("Invalid JSON response format from the API.");  
+        }  
+    }  
+
+    async function generateImage(prompt) {  
+         const payload = {  
+            contents: [{ parts: [{ text: prompt }] }],  
+            generationConfig: { responseModalities: ['IMAGE'] }  
+        };  
+        const result = await callApi(imageModel, payload);  
+        const base64Data = result?.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;  
+        if (!base64Data) throw new Error("Could not extract image data from API response.");  
+        return base64Data;  
+    }  
+      
+    function showError(message) {  
+        errorText.textContent = message;  
+        errorMessage.classList.remove('hidden');  
+    }  
+
+    function hideError() {  
+        errorMessage.classList.add('hidden');  
+    }  
+</script>
+
+</body>  
+</html>  
